@@ -22,18 +22,23 @@ exports.getCart = async (req, res) => {
       try {
         const axios = require('axios');
         const productResponse = await axios.get(`http://localhost:5000/api/v1/products/${item.product}`);
-        const product = productResponse.data;
+        const productData = productResponse.data?.product || productResponse.data;
         
-        if (product) {
-          item.name = product.name;
-          item.price = product.price;
-          item.image = product.images?.[0] || null;
-          item.description = product.description;
-          item.category = product.category;
-          item.brand = product.brand;
+        if (productData) {
+          // Calculate discounted price to match frontend
+          const discountPrice = productData.discount > 0 
+            ? Math.round(productData.price * (1 - productData.discount / 100))
+            : productData.price;
+
+          item.name = productData.name;
+          item.price = discountPrice;
+          item.image = productData.images?.[0] || null;
+          item.description = productData.description;
+          item.category = productData.category;
+          item.brand = productData.brand;
         } else {
           // Remove item if product not found
-          cart.items = cart.items.filter(i => i._id.toString() !== item._id.toString());
+          cart.items = cart.items.filter(i => i.product.toString() !== item.product.toString());
         }
       } catch (error) {
         console.error('Failed to fetch product for cart item:', error.message);
@@ -43,16 +48,13 @@ exports.getCart = async (req, res) => {
     }
 
     // Recalculate totals after any removals
-    cart.totalItems = cart.items.reduce((sum, item) => {
-      const quantity = Number(item.quantity) || 0;
-      const price = Number(item.price) || 0;
-      return sum + (quantity * price);
-    }, 0);
+    cart.totalItems = cart.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
     cart.totalAmount = cart.items.reduce((sum, item) => {
       const quantity = Number(item.quantity) || 0;
       const price = Number(item.price) || 0;
       return sum + (quantity * price);
     }, 0);
+    cart.totalAmount = Math.round(cart.totalAmount * 100) / 100;
 
     // Save updated cart with product details
     await cart.save();
@@ -83,17 +85,17 @@ exports.addToCart = async (req, res) => {
     }
 
     // Fetch product details from product service API
-    let product;
+    let productData;
     try {
       const axios = require('axios');
       const productResponse = await axios.get(`http://localhost:5000/api/v1/products/${productId}`);
-      product = productResponse.data;
+      productData = productResponse.data?.product || productResponse.data;
     } catch (error) {
       console.error('Failed to fetch product:', error.message);
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
     
-    if (!product) {
+    if (!productData) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
@@ -112,34 +114,37 @@ exports.addToCart = async (req, res) => {
     // Check if product already in cart
     const existingItemIndex = cart.items.findIndex(item => item.product.toString() === productId);
     
+    // Calculate discounted price to match frontend
+    const discountPrice = productData.discount > 0 
+      ? Math.round(productData.price * (1 - productData.discount / 100))
+      : productData.price;
+
     if (existingItemIndex > -1) {
       // Update quantity if item exists
-      cart.items[existingItemIndex].quantity += quantity;
+      cart.items[existingItemIndex].quantity += Number(quantity);
+      cart.items[existingItemIndex].price = discountPrice; // Update to latest price
     } else {
-      // Add new item with full product details
+      // Add new item with discount-adjusted price
       cart.items.push({
         product: productId,
-        name: product.name,
-        price: product.price,
-        image: product.images?.[0] || null,
-        description: product.description,
-        category: product.category,
-        brand: product.brand,
-        quantity: quantity
+        name: productData.name,
+        price: discountPrice,
+        image: productData.images?.[0] || null,
+        description: productData.description,
+        category: productData.category,
+        brand: productData.brand,
+        quantity: Number(quantity)
       });
     }
 
     // Recalculate totals
-    cart.totalItems = cart.items.reduce((sum, item) => {
-      const quantity = Number(item.quantity) || 0;
-      const price = Number(item.price) || 0;
-      return sum + (quantity * price);
-    }, 0);
+    cart.totalItems = cart.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
     cart.totalAmount = cart.items.reduce((sum, item) => {
       const quantity = Number(item.quantity) || 0;
       const price = Number(item.price) || 0;
       return sum + (quantity * price);
     }, 0);
+    cart.totalAmount = Math.round(cart.totalAmount * 100) / 100; // Round to 2 decimal places
 
     await cart.save();
 
@@ -192,8 +197,17 @@ exports.updateCartItem = async (req, res) => {
     }
 
     cart.items[itemIndex].quantity = quantity;
+    
+    // Recalculate totals
+    cart.totalItems = cart.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    cart.totalAmount = cart.items.reduce((sum, item) => {
+      const quantity = Number(item.quantity) || 0;
+      const price = Number(item.price) || 0;
+      return sum + (quantity * price);
+    }, 0);
+    cart.totalAmount = Math.round(cart.totalAmount * 100) / 100;
+
     await cart.save();
-    await cart.populate('items.product');
 
     res.status(200).json({
       success: true,
@@ -221,7 +235,6 @@ exports.removeFromCart = async (req, res) => {
     );
 
     await cart.save();
-    await cart.populate('items.product');
 
     res.status(200).json({
       success: true,

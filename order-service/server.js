@@ -10,7 +10,7 @@ app.use(cors());
 app.use(helmet());
 
 // Routes
-app.use('/api/v1/orders', require('./routes/orders'));
+app.use('/', require('./routes/orders'));
 
 const PORT = process.env.PORT || 5009;
 const DB_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/order_service';

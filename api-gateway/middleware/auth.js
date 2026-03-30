@@ -11,8 +11,8 @@ module.exports = function (req, res, next) {
 
   // Verify token
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
-    req.user = decoded.user;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_super_secret_jwt_key_change_this_in_production');
+    req.userId = decoded.userId;
     next();
   } catch (err) {
     res.status(401).json({ msg: 'Token is not valid' });

@@ -27,29 +27,20 @@ exports.createOrder = async (req, res) => {
     // Fetch product details for each item
     const orderItems = [];
     for (const item of items) {
-      try {
-        const product = await Product.findById(item.product);
-        if (!product) {
-          return res.status(400).json({
-            success: false,
-            message: `Product not found: ${item.product}`
-          });
-        }
-
-        orderItems.push({
-          product: item.product,
-          name: product.name,
-          price: product.price,
-          image: product.image,
-          quantity: item.quantity || 1
-        });
-      } catch (error) {
-        console.error('Error fetching product:', error);
-        return res.status(500).json({
+      if (!item.product) {
+        return res.status(400).json({
           success: false,
-          message: 'Error fetching product details'
+          message: 'Product ID is missing for one or more items'
         });
       }
+
+      orderItems.push({
+        product: item.product,
+        name: item.name || 'Product',
+        price: item.price || 0,
+        image: item.image || '',
+        quantity: item.quantity || 1
+      });
     }
 
     console.log('Mapped order items:', JSON.stringify(orderItems, null, 2));
